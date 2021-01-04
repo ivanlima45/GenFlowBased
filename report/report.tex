@@ -1,0 +1,258 @@
+\documentclass[]{IEEEtran}
+% Your packages go here
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{gensymb}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{mathtools}
+\usepackage{subfig}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{xfrac}
+\usepackage{amsmath}
+\usepackage{float}
+\DeclareMathOperator{\atantwo}{atan2}
+
+\DeclareMathOperator{\arctantwo}{arctan2}
+
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+ 
+\lstset{style=mystyle}
+ 
+\usepackage{lipsum}% http://ctan.org/pkg/lipsum
+\usepackage{graphicx}% http://ctan.org/pkg/graphicx
+
+\def\footnoterule{\relax%
+  \kern-2pt
+  \hbox to \columnwidth{\hfill\vrule width 0.7\columnwidth height 0.4pt\hfill}
+  \kern4.6pt}
+\makeatother
+
+\renewcommand{\lstlistingname}{Algorithm}% Listing -> Algorithm
+\usepackage[noadjust]{cite}
+\markboth{MO435 - Probabilistic Machine Learning }{}
+
+% \usepackage{graphicx}
+% \graphicspath{{../output/}}
+
+\begin{document}
+
+\title{Project 1 }
+\author{Ivan Lima do Espirito Santo \thanks{RA: 956694 - i956694@g.unicamp.br}\\ Rosa Yuliana Gabriela Paccotacya Yanque \thanks{RA: 263068 - r263068@dac.unicamp.br} \\ Thiago Gomes Marçal Pereira \thanks{RA: 189691 - t189691@g.unicamp.br}}
+
+\maketitle
+%%\begin{abstract}
+%%\end{abstract} 
+\section{Description}
+Flow-based generative models are powerful exact likelihood models with efficient sampling and inference. Despite their computational efficiency, flow-based models generally have much worse density modeling performance compared to state- of-the-art autoregressive models. In this project, we try to reproduce the results of ~\cite{pmlr-v97-ho19a} that closes the existing gap by improving upon three limiting design choices employed by flow-based models in prior work: the use of uniform noise for dequantization, the use of inexpressive affine flows, and the use of purely convolutional conditioning networks in coupling layers. The improvements brought by flow++ are therefore discussed next. The implementation suggested by \cite{pmlr-v97-ho19a} is available at: https://github.com/ aravindsrinivas/flowpp. 
+  
+\section{Introduction} \label{sec:introduction}
+Deep generative models – latent variable models in the form of variational autoencoders, implicit generative models in the form of GANs, and exact likelihood models like Pixel- RNN/CNN, Image Trans- former, PixelSNAIL, NICE, RealNVP, and Glow – have recently begun to successfully model high dimensional raw observations from complex real-world datasets, from natural images and videos, to audio signals and natural language.
+Autoregressive models, a certain subclass of exact likelihood models, achieve state-of-the-art density estimation performance on many challenging real-world datasets, but generally suffer from slow sampling time due to their autoregressive structure. Inverse autoregressive models can sample quickly and potentially have strong modeling capacity, but they cannot be trained efficiently by maximum likelihood. Non-autoregressive flow-based models (known as “flow models”), such as NICE, RealNVP, and Glow, are efficient for sampling, but have so far lagged behind autoregressive models in density estimation benchmarks. 
+In the hope of creating an ideal likelihood-based generative model that simultaneously has fast sampling, fast inference, and strong density estimation performance, flo++, which seeks to close the density estimation performance gap between flow models and autoregressive models. In subsequent sections, we present flow++ model, which is powered by an improved training procedure for continuous likelihood models and a number of architectural extensions of the coupling. 
+
+\section{Flow Models}
+A flow model $f$ is constructed as an invertible transformation that maps observed data $x$ to a standard Gaussian latent variable ~\(z = f(x)\), as in nonlinear independent component analysis. The key idea in the design of a flow model is to form f by stacking individual simple invertible transformations. Explicitly, f is constructed by composing a series of invertible ﬂows as ~$$f(\mathbf{x})=f_{1} \circ \cdots \circ f_{L}(\mathbf{x})$$, with each $f_i$ having a tractable inverse and a tractable Jacobian determinant. This way, sampling is efﬁcient, as it can be performed by computing
+
+\begin{equation}
+\log p(\mathbf{x})=\log \mathcal{N}(f(\mathbf{x}) ; \mathbf{0}, \mathbf{I})+\sum_{i=1}^{L} \log \left|\operatorname{det} \frac{\partial f_{i}}{\partial f_{i-1}}\right|
+\label{fpp01}
+\end{equation}
+
+\section{Flow++ Improvements}
+Flow++ addressed three modeling inefficiencies in prior work on flow models: (1) uniform noise is a sub-optimal dequantization choice that hurts both training loss and generalization; (2) commonly used affine coupling flows are not expressive enough; (3) convolutional layers in the conditioning networks of coupling layers are not powerful enough. \par
+Flow++ consists of a set of improved design choices: (1) variational flow-based dequantization instead of uniform dequantization; (2) logistic mixture CDF coupling flows; (3) self-attention in the conditioning networks of coupling layers. 
+\subsection{Dequantization}
+Many real-world datasets, such as CIFAR10 and ImageNet, are recordings of continuous signals quantized into discrete representations. Fitting a continuous density model to discrete data, however, will produce a degenerate solution that places all probability mass on discrete datapoints. A common solution to this problem is to first convert the discrete data distribution into a continuous distribution via a process called “dequantization,” and then model the resulting continuous distribution using the continuous density model.
+
+\subsection{ Uniform Dequantization }
+Dequantization is usually performed in prior work by adding uniform noise to the discrete data over the width of each discrete bin: if each of the D components of the discrete data $x$ takes on values in ${0,1,2,...,255}$, then the dequantized data is given by $y = x+u$, where $u$ is drawn uniformly from $[0,1)^{D}$. Training a continuous density model $p_{model}$ on uniformly dequantized data $y$ can be interpreted as maximizing a lower bound on the log-likelihood for a certain discrete model $p_{model}$ on the original discrete data $x$: 
+
+\begin{equation}
+P_{\text {model }}(\mathbf{x}):=\int_{[0,1) D} p_{\text {model }}(\mathbf{x}+\mathbf{u}) d \mathbf{u}
+\label{fpp02}
+\end{equation}
+The argument proceeds as follows. Letting $P_{data}$ denote the original distribution of discrete data and $p_{data}$ denote the distribution of uniformly dequantized data, Jensen’s inequality implies that
+
+\begin{equation}
+\mathbb{E}_{\mathbf{y} \sim p_{\text {data }}}\left[\log p_{\text {model }}(\mathbf{y})\right]
+\label{fpp03}
+\end{equation}
+
+\begin{equation}
+=\sum_{\mathbf{x}} P_{\operatorname{data}}(\mathbf{x}) \int_{[0,1) D} \log p_{\bmod \mathrm{el}}(\mathbf{x}+\mathbf{u}) d \mathbf{u}
+\label{fpp04}
+\end{equation}
+
+\begin{equation}
+\leq \sum_{\mathbf{x}} P_{\operatorname{data}}(\mathbf{x}) \log \int_{[0,1) D} p_{\text {model }}(\mathbf{x}+\mathbf{u}) d \mathbf{u}
+\label{fpp05}
+\end{equation}
+
+\begin{equation}
+=\mathbb{E}_{\mathbf{x} \sim P_{\text {data }}}\left[\log P_{\text {model }}(\mathbf{x})\right]
+\label{fpp06}
+\end{equation}
+
+Consequently, maximizing the log likelihood of the continuous model on uniformly dequantized data cannot lead to the continuous model degenerately collapsing onto the discrete data, because its objective is bounded above by the loglikelihood of a discrete model. 
+
+\subsubsection{ Variational Dequantization }
+While uniform dequantization successfully prevents the continuous density model $p_{model}$ from collapsing to a degenerate mixture of point masses on discrete data, it asks $p_{model}$ to assign uniform density to unit hypercubes $x+[0,1)^{D}$ around the data $x$. It is difficult and unnatural for smooth function approximators, such as neural network density models, to excel at such a task. To sidestep this issue, flow++ introduces a new dequantization technique based on variational inference. 
+The interest is modeling $D$-dimensional discrete data $\mathbf{x} \sim P_{\text {data }}$using a continuous density model $p_{model}$, and it can be done by maximizing the log likelihood $P_{\operatorname{model}}(\mathbf{x}):=\int_{[0,1)^{D}} p_{\operatorname{model}}(\mathbf{x}+\mathbf{u}) d \mathbf{u}$~Now, however, they introduce a dequantization noise distribution $q(\mathbf{u} | \mathbf{x})$, with support over$\mathbf{u} \in[0,1)^{D}$. Treating $q$ as an approximate posterior, they have the following variational lower bound, which holds for all $q$: 
+\begin{equation}
+\mathbb{E}_{\mathbf{x} \sim P_{\text {data }}}\left[\log P_{\text {model }}(\mathbf{x})\right]
+\label{fpp07}
+\end{equation}
+\begin{equation}
+=\mathbb{E}_{\mathbf{x} \sim P_{\text {data }}}\left[\log \int_{[0,1)^{D}} q(\mathbf{u} | \mathbf{x}) \frac{p_{\text {model }}(\mathbf{x}+\mathbf{u})}{q(\mathbf{u} | \mathbf{x})} d \mathbf{u}\right]
+\label{fpp08}
+\end{equation}
+\begin{equation}
+\geq \mathbb{E}_{\mathbf{x} \sim P_{\text {data }}}\left[\int_{[0,1)^{D}} q(\mathbf{u} | \mathbf{x}) \log \frac{p_{\text {model }}(\mathbf{x}+\mathbf{u})}{q(\mathbf{u} | \mathbf{x})} d \mathbf{u}\right]
+\label{fpp09}
+\end{equation}
+\begin{equation}
+=\mathbb{E}_{\mathbf{x} \sim P_{\text {data }}} \mathbb{E}_{\mathbf{u} \sim q(\cdot | \mathbf{x})}\left[\log \frac{p_{\text {model }}(\mathbf{x}+\mathbf{u})}{q(\mathbf{u} | \mathbf{x})}\right]
+\label{fpp10}
+\end{equation}
+
+They will choose $q$ itself to be a conditional flow-based generative model of the form  $\mathbf{u}=q_{\mathbf{x}}(\boldsymbol{\epsilon})$ where $E \sim p(\epsilon)=\mathcal{N}(\epsilon ; \mathbf{0}, \mathbf{I})$ is Gaussian noise. In this case $-q(\mathbf{u} | \mathbf{x})=p\left(q_{\mathbf{x}}^{-1}(\mathbf{u})\right) \cdot\left|\partial q_{\mathbf{x}}^{-1} / \partial \mathbf{u}\right|$,and thus they obtain the objective:
+\begin{equation}
+\mathbb{E}_{\mathbf{x} \sim P_{\text {data }}}\left[\log P_{\text {model }}(\mathbf{x})\right]
+\label{fpp11}
+\end{equation}
+
+\begin{equation}
+\geq \mathbb{E}_{\mathbf{x} \sim P_{\mathrm{data}}, \epsilon \sim p}\left[\log \frac{p_{\operatorname{model}}\left(\mathbf{x}+q_{\mathbf{x}}(\epsilon)\right)}{p(\epsilon)\left|\partial q_{\mathbf{x}} / \partial \epsilon\right|^{-1}}\right]
+\label{fpp12}
+\end{equation}
+which they maximize jointly over $p_{\text {model }}$ and $q .$ When $p_{\text {model }}$ is also a flow model $\mathrm{x}=f^{-1}(\mathrm{z})$ (as it is throughout flow++), it is straightforward to calculate a stochastic gradient of this objective using the pathwise derivative estimator, as $f\left(\mathrm{x}+q_{\mathrm{x}}(\epsilon)\right)$ is differentiable with respect to the parameters of $f$ and $q$
+
+Notice that the lower bound for uniform dequantization eqs. \ref{fpp04} to \ref{fpp06} is a special case of our variational lower bound - eqs. \ref{fpp08} to \ref{fpp10} when the dequantization distribution $q$ is a uniform distribution that ignores dependence on $x$. Because the gap between the objective \ref{fpp10} and the true expected log likelihood $\mathbb{E}_{\mathbf{x} \sim P_{\text {date }}}\left[\log P_{\text {model }}(\mathbf{x})\right]$ is exactly $\mathbb{E}_{\mathbf{x} \sim P_{\text {data }}}\left[D_{\mathrm{KL}}\left(q(\mathbf{u} | \mathbf{x}) \| p_{\text {model }}(\mathbf{u} | \mathbf{x})\right)\right],$ using a uniform $q$
+forces $p_{\text {model }}$ to unnaturally place uniform density over each hypercube $x+[0,1)^{D}$ to compensate for any potential looseness in the variational bound introduced by the inexpressive $q .$ Using an expressive flow-based $q$ on the other hand, allows $p_{\text {model to place density in each hypercube }} \mathbf{x}+[0,1)^{D}$ according to a much more flexible distribution $q(\mathbf{u} | \mathbf{x})$. This is a more natural task for $p_{\text {model to perform, improving both }}$ training and generalization loss.
+
+\section{Improved Coupling Layers}
+Recent progress in the design of flow models has involved carefully constructing flows to increase their expressiveness while preserving tractability of the inverse and Jacobian determinant computations. One example is the invertible $1 \times 1$ convolution flow, whose inverse and Jacobian determinant can be calculated and differentiated with standard automatic differentiation libraries. Another example, which they build upon in their work, is the affine coupling layer. It is a parameterized flow $\mathbf{y}=f_{\theta}(\mathbf{x})$ that first splits the components of $\mathbf{x}$ into two parts $\mathbf{x}_{1}, \mathbf{x}_{2},$ and then computes $\mathbf{y}=\left(\mathbf{y}_{1}, \mathbf{y}_{2}\right)$
+given by
+\begin{equation}
+\mathbf{y}_{1}=\mathbf{x}_{1}, \quad \mathbf{y}_{2}=\mathbf{x}_{2} \cdot \exp \left(\mathbf{a}_{\theta}\left(\mathbf{x}_{1}\right)\right)+\mathbf{b}_{\theta}\left(\mathbf{x}_{1}\right)
+\label{fpp13}
+\end{equation}
+Where, $a_{\theta}$ and $b_{\theta}$ are outputs of a neural network that acts on $\mathrm{x}_{1}$ in a complex, expressive manner, but the resulting behavior on $x_{2}$ always remains an elementwise affine transformation - effectively, a $_{\theta}$ and $\mathbf{b}_{\theta}$ together form a dataparameterized family of invertible affine transformations. This allows the affine coupling layer to express complex dependencies on the data while keeping inversion and log likelihood computation tractable. Using $\cdot$ and $exp$ to respectively denote elementwise multiplication and exponentiation, the affine coupling layer is defined by:
+\begin{equation}
+\mathbf{x}_{1}=\mathbf{y}_{1} 
+\label{fpp14}
+\end{equation}
+\begin{equation}
+\mathbf{x}_{2} =\left(\mathbf{y}_{2}-\mathbf{b}_{\theta}\left(\mathbf{y}_{1}\right)\right) \cdot \exp \left(-\mathbf{a}_{\theta}\left(\mathbf{y}_{1}\right)\right) 
+\label{fpp15}
+\end{equation}
+\begin{equation}
+\log \left|\frac{\partial \mathbf{y}}{\partial \mathbf{x}}\right| =\mathbf{1}^{\top} \mathbf{a}_{\theta}\left(\mathbf{x}_{1}\right) \label{fpp16}
+\end{equation}
+The splitting operation $\mathbf{x} \mapsto\left(\mathbf{x}_{1}, \mathbf{x}_{2}\right)$ and merging operation $\left(\mathbf{y}_{1}, \mathbf{y}_{2}\right) \mapsto \mathbf{y}$ are usually performed over channels or over space in a checkerboard-like pattern.
+
+\subsection{Expressive Coupling Transformations with Continuous Mixture CDFS}
+
+They found in their experiments that density modeling performance of these coupling layers could be improved by augmenting the data-parameterized elementwise affine transformations by more general nonlinear elementwise transformations. For a given scalar component $x$ of $\mathbf{x}_{2},$ they apply the cumulative distribution function (CDF) for a mixture of $K$ logistics - parameterized by mixture probabilities, means, and log scales $\pi, \boldsymbol{\mu}, \mathbf{s}-$ followed by an inverse sigmoid and an affine transformation parameterized by $a$ and $b$
+\begin{equation}
+x \longmapsto \sigma^{-1}(\operatorname{MixLog} \operatorname{CDF}(x ; \pi, \boldsymbol{\mu}, \mathbf{s})) \cdot \exp (a)+b
+\label{fpp17}
+\end{equation}
+where
+\begin{equation}
+\operatorname{MixLogCDF}(x ; \pi, \boldsymbol{\mu}, \mathbf{s}):=\sum_{i=1}^{K} \pi_{i} \sigma\left(\left(x-\mu_{i}\right) \cdot \exp \left(-s_{i}\right)\right)
+\label{fpp18}
+\end{equation}
+The transformation parameters $\pi, \boldsymbol{\mu}, \mathbf{s}, a, b$ for each component of $\mathbf{x}_{2}$ are produced by a neural network acting on $\mathbf{x}_{1} .$ This neural network must produce these transformation parameters for each component of $\mathbf{x}_{2},$ hence it produces vectors $\mathbf{a}_{\theta}\left(\mathbf{x}_{1}\right)$ and $\mathbf{b}_{\theta}\left(\mathbf{x}_{1}\right)$ and tensors $\boldsymbol{\pi}_{\theta}\left(\mathbf{x}_{1}\right), \boldsymbol{\mu}_{\theta}\left(\mathbf{x}_{1}\right), \mathbf{s}_{\theta}\left(\mathbf{x}_{1}\right)$
+(with last axis dimension $K$ ). The coupling transformation is then given by:
+
+\begin{equation}
+\mathbf{y}_{1}=\mathbf{x}_{1} \\
+\label{fpp19}
+\end{equation}
+
+\begin{multline}
+\mathbf{y}_{2}=\sigma^{-1}\left(\operatorname{Mix} \log \operatorname{CDF}\left(\mathbf{x}_{2}; \boldsymbol{\pi}_{\theta}\left(\mathbf{x}_{1}\right), \boldsymbol{\mu}_{\theta}\left(\mathbf{x}_{1}\right),\mathbf{s}_{\theta}\left(\mathbf{x}_{1}\right)\right)\right)\\  
+\cdot \exp \left(\mathbf{a}_{\theta}\left(\mathbf{x}_{1}\right)\right)+\mathbf{b}_{\theta}\left(\mathbf{x}_{1}\right)
+\label{fpp20}
+\end{multline}
+
+where the formula for computing $\mathbf{y}_{2}$ operates elementwise.
+
+The inverse sigmoid ensures that the inverse of this coupling transformation always exists: the range of the logistic mixture CDF is $(0,1)$ so the domain of its inverse must stay within this interval. The CDF itself can be inverted efficiently with bisection, because it is a monotonically increasing function. Moreover, the Jacobian determinant of this transformation involves calculating the probability density function of the logistic mixtures, which poses no computational difficulty.
+
+
+\subsection{ Expressive Conditioning Architectures  with Self-Attention }
+In addition to improving the expressiveness of the elementwise transformations on $\mathbf{x}_{2}$, they improved the expressiveness of the conditioning on $x_{1}-$ that is, the expressiveness of the neural network responsible for producing the elementwise transformation parameters $\pi, \boldsymbol{\mu}, \mathbf{s}, \mathbf{a}, \mathbf{b}$. Their best results were obtained by stacking convolutions and multi-head self attention into a gated residual network, in a manner resembling the Transformer with pointwise feedforward layers replaced by $3 \times 3$ convolutional layers. Their architecture is defined as a stack of blocks. Each block consists of the following two layers connected in a residual fashion, with layer normalization after each residual connection:
+\[
+\begin{aligned}
+\text { Conv } &=\text { Input } \rightarrow \text { Nonlinearity } \\
+& \rightarrow \text { Conv }_{3 \times 3} \rightarrow \text { Nonlinearity } \rightarrow \text { Gate } \\
+\text { Attn } &=\text { Input } \rightarrow \text { Conv }_{1 \times 1} \\
+& \rightarrow \text { MultiHeadSelfAttention } \rightarrow \text { Gate }
+\end{aligned}
+\]
+where Gate refers to a $1 \times 1$ convolution that doubles the number of channels, followed by a gated linear unit. The convolutional layer is identical to the one used for PixelCNN++ ~\cite{NIPS2016_6114}, and the multi-head self attention mechanism flow uses is identical to the one in the Transformer~\cite{NIPS2017_7181}. Flow++ uses 4 heads in their experiments, since they found it to be effective in their experimentation process.
+With these blocks in hand, the network that outputs the elementwise transformation parameters is simply given by stacking blocks on top of each other, and finishing with a final convolution that increases the number of channels to the amount needed to specify the elementwise transformation parameters.
+
+\section{Project work}
+Our task in this project is to reproduce the results of Flow++ ~\cite{pmlr-v97-ho19a} for CIFAR10. That means that we must implement their method and execute the experiments to compare the density model(cf.[1,Table1]),and produce samples for the database(cf.[1,Figure2]). It is the minimum expected. We are free to experiment with different conﬁgurations of the architecture (beyond the present done in the paper) and compare those modiﬁcations too if we want to explore further architectures. We are expected to code our own solution. It's recommended to check the implementation just in case we get stuck, but not to do it from the beginning. That way we can get our own idea on how to implement the solution. 
+
+\section{Flow++ Experiments}
+They show that Flow++ achieves state-of-the-art density modeling performance among non-autoregressive models on CIFAR10 and 32x32 and 64x64 ImageNet. They also present ablation experiments that quantify the improvements proposed in section above, and they present example generative samples from Flow++ and compare them against samples from autoregressive models. 
+Their experiments employed weight normalization and data- dependent initialization. They used the checkerboard-splitting, channel-splitting, and downsampling flows of ~\cite{DBLP:journals/corr/DinhSB16}; they also used before every coupling flow an invertible 1x1 convolution flows of ~\cite{NIPS2018_8224}, as well as a variant of their “actnorm” flow that normalizes all activations independently 
+(instead of normalizing per channel). Their CIFAR10 model used 4 coupling layers with checkerboard splits at 32x32 resolution, 2 coupling layers with channel splits at 16x16 resolution, and 3 coupling layers with checkerboard splits at 16x16 resolution; each coupling layer used 10 convolution attention blocks, all with 96 filters. More details on archi- tectures, as well as details for the other experiments, are in their source code release. 
+
+\subsubsection{Density modeling results }
+
+\subsubsection{Ablations }
+
+
+\subsubsection{Samples}
+
+\subsection{Related Work}
+
+\subsection{Conclusion}
+Flow++ presented in 2019 is a new ﬂow-based generative model that begins to close the performance gap between ﬂow models and autoregressive models. Their work considers speciﬁc instantiations of design principles for ﬂow models–dequantization, ﬂow design, and conditioning architecture design –flow++ will guide future research in ﬂow models and likelihood-based models in general.
+
+
+\bibliographystyle{abbrv}
+\bibliography{bibliography}
+
+\clearpage
+\onecolumn
+\begin{appendices}
+
+\section{App} \label{sec:appendix-1}
+ 
+\newpage
+
+\end{appendices}
+\end{document}
